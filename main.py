@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
@@ -25,6 +26,8 @@ SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
 GESTIONALE_TOKEN = os.getenv("GESTIONALE_TOKEN", "lamape-gestionale-2026")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SHOPIFY_LOCATION_ID = os.getenv("SHOPIFY_LOCATION_ID")
+SHOPIFY_CLIENT_ID = os.getenv("SHOPIFY_CLIENT_ID")
+SHOPIFY_CLIENT_SECRET = os.getenv("SHOPIFY_CLIENT_SECRET")
 
 BASE_URL = f"https://{SHOPIFY_STORE}/admin/api/2026-01"
 SHOPIFY_HEADERS = {"X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN}
@@ -41,6 +44,43 @@ def verify_token(request: Request):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/shopify/auth")
+def shopify_auth():
+    scopes = "read_products,read_inventory,write_inventory"
+    redirect_uri = "https://lamape-gestionale-backend.onrender.com/shopify/callback"
+    url = (
+        f"https://{SHOPIFY_STORE}/admin/oauth/authorize"
+        f"?client_id={SHOPIFY_CLIENT_ID}"
+        f"&scope={scopes}"
+        f"&redirect_uri={redirect_uri}"
+    )
+    return RedirectResponse(url)
+
+
+@app.get("/shopify/callback")
+async def shopify_callback(code: str = None, shop: str = None):
+    if not code:
+        return HTMLResponse("<h1>Errore: codice mancante</h1>")
+    redirect_uri = "https://lamape-gestionale-backend.onrender.com/shopify/callback"
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"https://{SHOPIFY_STORE}/admin/oauth/access_token",
+            json={
+                "client_id": SHOPIFY_CLIENT_ID,
+                "client_secret": SHOPIFY_CLIENT_SECRET,
+                "code": code,
+            },
+            timeout=10,
+        )
+        data = resp.json()
+    token = data.get("access_token", "")
+    return HTMLResponse(f"""
+    <h2>Token ottenuto!</h2>
+    <p>Copia questo token e mandalo all'assistente:</p>
+    <code style="font-size:18px;background:#eee;padding:12px;display:block">{token}</code>
+    """)
 
 
 @app.get("/api/products")
