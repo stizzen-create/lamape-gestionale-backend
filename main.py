@@ -23,6 +23,7 @@ SHOPIFY_STORE = os.getenv("SHOPIFY_STORE")
 SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
 GESTIONALE_TOKEN = os.getenv("GESTIONALE_TOKEN", "lamape-gestionale-2026")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+SHOPIFY_LOCATION_ID = os.getenv("SHOPIFY_LOCATION_ID")
 
 BASE_URL = f"https://{SHOPIFY_STORE}/admin/api/2026-01"
 SHOPIFY_HEADERS = {"X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN}
@@ -79,15 +80,8 @@ class UpdateInventoryRequest(BaseModel):
 async def api_update_inventory(request: Request, body: UpdateInventoryRequest):
     verify_token(request)
     async with httpx.AsyncClient() as client:
-        loc_resp = await client.get(f"{BASE_URL}/locations.json", headers=SHOPIFY_HEADERS, timeout=10)
-        loc_resp.raise_for_status()
-        locations = loc_resp.json().get("locations", [])
-        if not locations:
-            raise HTTPException(status_code=500, detail="Nessuna location trovata")
-        location_id = locations[0]["id"]
-
         payload = {
-            "location_id": location_id,
+            "location_id": int(SHOPIFY_LOCATION_ID),
             "inventory_item_id": int(body.inventoryItemId),
             "available": body.quantity,
         }
