@@ -1,10 +1,11 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from groq import Groq
 import os
 import httpx
 import json
+import base64
+import google.generativeai as genai
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,13 +23,13 @@ app.add_middleware(
 SHOPIFY_STORE = os.getenv("SHOPIFY_STORE")
 SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
 GESTIONALE_TOKEN = os.getenv("GESTIONALE_TOKEN", "lamape-gestionale-2026")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SHOPIFY_LOCATION_ID = os.getenv("SHOPIFY_LOCATION_ID")
 
 BASE_URL = f"https://{SHOPIFY_STORE}/admin/api/2026-01"
 SHOPIFY_HEADERS = {"X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN}
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
 
 
 def verify_token(request: Request):
@@ -112,20 +113,14 @@ Rispondi SOLO con JSON valido, array di oggetti con campi: name, color, size, qu
 Esempio: [{"name":"Camicia Raso","color":"Beige","size":"Taglia Unica","quantity":1}]
 Se non trovi articoli rispondi con array vuoto: []"""
 
-    response = groq_client.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{body.image_base64}"}}
-            ]
-        }],
-        max_tokens=2000,
-        temperature=0,
-    )
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    image_data = base64.b64decode(body.image_base64)
+    response = model.generate_content([
+        prompt,
+        {"mime_type": "image/jpeg", "data": image_data},
+    ])
 
-    raw = response.choices[0].message.content.strip()
+    raw = response.text.strip()
     start = raw.find('[')
     end = raw.rfind(']') + 1
     if start == -1 or end == 0:
