@@ -34,6 +34,11 @@ SHOPIFY_HEADERS = {"X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN}
 
 genai.configure(api_key=GEMINI_API_KEY)
 
+import time
+_products_cache: list = []
+_products_cache_time: float = 0
+CACHE_TTL = 300  # 5 minuti
+
 
 def verify_token(request: Request):
     auth = request.headers.get("Authorization", "")
@@ -85,7 +90,12 @@ async def shopify_callback(code: str = None, shop: str = None):
 
 @app.get("/api/products")
 async def api_products(request: Request):
+    global _products_cache, _products_cache_time
     verify_token(request)
+
+    if _products_cache and (time.time() - _products_cache_time) < CACHE_TTL:
+        return _products_cache
+
     url = f"{BASE_URL}/products.json?limit=250"
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers=SHOPIFY_HEADERS, timeout=15)
@@ -109,6 +119,9 @@ async def api_products(request: Request):
             "collection": "",
             "variants": variants,
         })
+
+    _products_cache = result
+    _products_cache_time = time.time()
     return result
 
 
@@ -134,6 +147,7 @@ async def api_update_inventory(request: Request, body: UpdateInventoryRequest):
         )
         if inv_resp.status_code != 200:
             raise HTTPException(status_code=500, detail=f"Shopify {inv_resp.status_code}: {inv_resp.text}")
+    _products_cache_time = 0  # invalida cache dopo aggiornamento
     return {"success": True}
 
 
