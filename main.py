@@ -117,14 +117,24 @@ async def api_products(request: Request):
     if _products_cache and (time.time() - _products_cache_time) < CACHE_TTL:
         return _products_cache
 
+    all_products = []
     url = f"{BASE_URL}/products.json?limit=250"
     async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=SHOPIFY_HEADERS, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
+        while url:
+            resp = await client.get(url, headers=SHOPIFY_HEADERS, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            all_products.extend(data.get("products", []))
+            # Shopify cursor pagination: segui il link "next" se presente
+            link_header = resp.headers.get("Link", "")
+            url = None
+            for part in link_header.split(","):
+                if 'rel="next"' in part:
+                    url = part.split(";")[0].strip().strip("<>")
+                    break
 
     result = []
-    for product in data.get("products", []):
+    for product in all_products:
         variants = []
         for v in product.get("variants", []):
             variants.append({
