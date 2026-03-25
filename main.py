@@ -13,6 +13,26 @@ load_dotenv()
 
 app = FastAPI()
 
+
+async def _keep_alive():
+    """Pinga /health ogni 14 minuti per evitare il sleep su Render free tier."""
+    await asyncio.sleep(60)  # aspetta 1 min dopo il cold start prima del primo ping
+    while True:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.get(
+                    "https://lamape-gestionale-backend.onrender.com/health",
+                    timeout=10,
+                )
+        except Exception:
+            pass
+        await asyncio.sleep(14 * 60)
+
+
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(_keep_alive())
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,6 +54,7 @@ SHOPIFY_HEADERS = {"X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN}
 
 genai.configure(api_key=GEMINI_API_KEY)
 
+import asyncio
 import time
 _products_cache: list = []
 _products_cache_time: float = 0
